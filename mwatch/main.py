@@ -1,7 +1,12 @@
 import logging
+from itertools import chain
+from pprint import pformat
 
 import pymongo
-
+try:
+    from mongoquery import Query, QueryError
+except ImportError:
+    Query = QueryError = None
 
 log = logging.getLogger(__name__)
 
@@ -17,8 +22,8 @@ class Watcher:
             self._cursor_type = pymongo.CursorType.TAILABLE
         self._last_ts = self._get_last_ts()
 
-    def watch_query(self, collection, qspec=None):
-        res = QueryWatch(self, collection, qspec)
+    def watch_query(self, collection, qspec=None, check_inserts=False):
+        res = QueryWatch(self, collection, qspec, check_inserts)
         self.watches[id(res)] = res
         return res
 
@@ -43,29 +48,28 @@ class Watcher:
         return final_entry['ts']
 
     def _get_cursor(self):
-        branches = (w.oplog_spec() for w in self.watches.values())
-        branches = [br for br in branches if br is not None]
+        branches = list(chain(*[
+            w.oplog_branches() for w in self.watches.values()]))
         assert branches, 'Nothing to watch'
         if len(branches) == 1:
             spec = branches[0]
         else:
             spec = {'$or': branches}
         spec['ts'] = {'$gt': self._last_ts}
-        log.debug('Query oplog with %s', spec)
+        log.debug('Query oplog with\n%s', pformat(spec))
         return self.oplog.find(
             spec,
             cursor_type=self._cursor_type,
-            oplog_replay=True,
-            sort=[('$natural', 1)])
+            oplog_replay=True)
 
     def __iter__(self):
         curs = self._get_cursor()
         stateful_watches = [
             w for w in self.watches.values()
-            if hasattr(w, 'process_cursor')]
-        for w in stateful_watches:
-            curs = w.process_cursor(curs)
+            if hasattr(w, 'process_entry')]
         for doc in curs:
+            for w in stateful_watches:
+                w.process_entry(doc)
             self._last_ts = doc['ts']
             yield doc
 
@@ -82,10 +86,15 @@ class Watch:
 class QueryWatch(Watch):
     """Insert/update/delete watch for a query (stateful)."""
 
-    def __init__(self, watcher, collection, qspec=None):
+    def __init__(
+            self, watcher, collection, qspec=None, check_inserts=False):
         super().__init__(watcher)
         self.collection = collection
         self.qspec = qspec
+        self.check_inserts = check_inserts
+        if check_inserts:
+            assert Query is not None, 'Cannot check inserts without mongoquery'
+            self._mquery = Query(qspec)
         self._ns = '{}.{}'.format(
             collection.database.name,
             collection.name)
@@ -98,41 +107,35 @@ class QueryWatch(Watch):
     def __repr__(self):
         return '<QueryWatch {} {}>'.format(self._ns, self.qspec)
 
-    def oplog_spec(self):
+    def oplog_branches(self):
         if self.qspec is None:
-            return {'ns': self._ns, 'op': {'$in': ['i', 'u', 'd']}}
+            yield {'ns': self._ns, 'op': {'$in': ['i', 'u', 'd']}}
+            return
         ins_watch = InsertWatch(self.watcher, self.collection, self.qspec)
         if self._ids:
             watches = [
                 ins_watch,
                 UpdateWatch(self.watcher, self.collection, list(self._ids)),
                 DeleteWatch(self.watcher, self.collection, list(self._ids))]
-            return {'$or': [w.oplog_spec() for w in watches]}
         else:
-            return ins_watch.oplog_spec()
+            watches = [ins_watch]
+        for w in watches:
+            yield from w.oplog_branches()
 
-    def process_cursor(self, cursor):
+    def process_entry(self, entry):
         if not self.qspec:
-            return cursor
-
-        def decorate_cursor():
-            for entry in cursor:
-                if entry['ns'] != self._ns:
-                    return
-                if entry['op'] == 'i' and self._match(entry['o']['_id']):
-                    self._ids.add(entry['o']['_id'])
-                elif entry['op'] == 'd':
-                    self._ids.discard(entry['o']['_id'])
-                yield entry
-        return decorate_cursor()
-
-    def _match(self, idval):
-        spec = dict(self.qspec)
-        if '_id' in spec:
-            spec = {'$and': [spec, {'_id': idval}]}
-        else:
-            spec['_id'] = idval
-        return 1 == self.collection.find(spec).count()
+            # no need to track IDs
+            return
+        if entry['ns'] != self._ns:
+            # not my collection
+            return
+        if entry['op'] == 'i':
+            if self.check_inserts and not self._mquery.match(entry['o']):
+                # I don't watch that doc
+                return
+            self._ids.add(entry['o']['_id'])
+        elif entry['op'] == 'd':
+            self._ids.discard(entry['o']['_id'])
 
 
 class InsertWatch(Watch):
@@ -147,14 +150,14 @@ class InsertWatch(Watch):
     def __repr__(self):
         return '<InsertWatch {} {}>'.format(self._ns, self.qspec)
 
-    def oplog_spec(self):
+    def oplog_branches(self):
         qspec = {
             'o.{}'.format(k): v
             for k, v in self.qspec.items()}
         if self.qspec:
-            return {'op': 'i', 'ns': self._ns, **qspec}
+            yield {'op': 'i', 'ns': self._ns, **qspec}
         else:
-            return {'op': 'i', 'ns': self._ns}
+            yield {'op': 'i', 'ns': self._ns}
 
 
 class UpdateWatch(Watch):
@@ -169,15 +172,14 @@ class UpdateWatch(Watch):
     def __repr__(self):
         return '<UpdateWatch {} {}>'.format(self._ns, self._ids)
 
-    def oplog_spec(self):
+    def oplog_branches(self):
         if self._ids is None:
-            return {'op': 'u', 'ns': self._ns}
+            yield {'op': 'u', 'ns': self._ns}
         ids = list(self._ids)
         if len(ids) == 1:
-            return {'op': 'u', 'ns': self._ns, 'o2._id': ids[0]}
+            yield {'op': 'u', 'ns': self._ns, 'o2._id': ids[0]}
         if len(ids) > 0:
-            return {'op': 'u', 'ns': self._ns, 'o2._id': {'$in': ids}}
-        return None
+            yield {'op': 'u', 'ns': self._ns, 'o2._id': {'$in': ids}}
 
     def unwatch(self, id):
         self._ids.remove(id)
@@ -195,15 +197,14 @@ class DeleteWatch(Watch):
     def __repr__(self):
         return '<DeleteWatch {} {}>'.format(self._ns, self._ids)
 
-    def oplog_spec(self):
+    def oplog_branches(self):
         if self._ids is None:
-            return {'op': 'd', 'ns': self._ns}
+            yield {'op': 'd', 'ns': self._ns}
         ids = list(self._ids)
         if len(ids) == 1:
-            return {'op': 'd', 'ns': self._ns, 'o._id': ids[0]}
+            yield {'op': 'd', 'ns': self._ns, 'o._id': ids[0]}
         if len(ids) > 0:
-            return {'op': 'd', 'ns': self._ns, 'o._id': {'$in': ids}}
-        return None
+            yield {'op': 'd', 'ns': self._ns, 'o._id': {'$in': ids}}
 
     def unwatch(self, id):
         self._ids.remove(id)
