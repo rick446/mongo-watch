@@ -51,11 +51,7 @@ Insert some data
 See what our watches observed
 
 ```
->>> print('Inserts')
-Inserts
->>> ops = list(w)
->>> assert len(ops) == 6
->>> for op in ops:
+>>> for op in w:
 ...     print(op)
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 0, 'foo': 1}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 1, 'foo': 1}}
@@ -78,14 +74,23 @@ Do some updates
 See what they observed
 
 ```
->>> print('Updates')
-Updates
->>> ops = list(w)
->>> assert len(ops) == 3
->>> for op in ops:
+>>> for op in w:
 ...     print(op)
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 0}, 'o': {'$set': {'bar': 1}}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 1}, 'o': {'$set': {'bar': 1}}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 2}, 'o': {'$set': {'bar': 1}}}
 
 ```
+
+... and a delete
+
+```
+>>> with client:
+...     coll.delete_one({'_id': 1})
+<pymongo.results.DeleteResult object at ...>
+>>> for op in w:
+...     print(op)
+{'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'd', 'ns': 'test.test', 'o': {'_id': 1}}
+
+```
+
