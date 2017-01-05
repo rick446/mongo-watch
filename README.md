@@ -28,6 +28,7 @@ Set up our watches
 
 Insert some data
 
+```
 >>> docs = [
 ...     {'_id': 0, 'foo': 1},
 ...     {'_id': 1, 'foo': 1},
@@ -38,9 +39,11 @@ Insert some data
 >>> with client:
 ...     coll.insert_many(docs)
 <pymongo.results.InsertManyResult object at ...>
+```
 
 See what our watches observed
 
+```
 >>> print('Inserts')
 Inserts
 >>> ops = list(w)
@@ -53,15 +56,19 @@ Inserts
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 3, 'foo': 2}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 4, 'foo': 2}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 5, 'foo': 2}}
+```
 
 Do some updates
 
+```
 >>> with client:
 ...     coll.update_many({}, {'$set': {'bar': 1}})
 <pymongo.results.UpdateResult object at ...>
+```
 
 See what they observed
 
+```
 >>> print('Updates')
 Updates
 >>> ops = list(w)
@@ -71,3 +78,4 @@ Updates
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 0}, 'o': {'$set': {'bar': 1}}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 1}, 'o': {'$set': {'bar': 1}}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 2}, 'o': {'$set': {'bar': 1}}}
+```
