@@ -7,6 +7,7 @@ Usage:
 
 Some imports & setup:
 
+```
 >>> from pymongo import MongoClient
 >>> from mwatch.main import Watcher
 >>> client = MongoClient(port=27018)  # Must be a replica set
@@ -15,9 +16,11 @@ Some imports & setup:
 >>> coll = db.test
 >>> coll.delete_many({})
 <pymongo.results.DeleteResult object at ...>
+```
 
 Set up our watches
 
+```
 >>> w = Watcher(client)
 >>> w.watch_query(
 ...     coll, {'foo': 1}, check_inserts=True)
@@ -25,6 +28,7 @@ Set up our watches
 >>> w.watch_inserts(
 ...     coll, {'foo': 2})
 <InsertWatch test.test {'foo': 2}>
+```
 
 Insert some data
 
