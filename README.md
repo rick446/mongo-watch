@@ -72,7 +72,7 @@ Do some updates
 ```
 
 See what they observed. Note that we don't see anything for the `foo: 2` documents since we're not watching for
-updates on them (only for inserts). Our query watch, however, _is_ tracking them.
+updates on them (only for inserts). Our query watch, however, _is_ tracking the `foo: 1` docs.
 
 ```
 >>> for op in w:
