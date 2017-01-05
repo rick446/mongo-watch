@@ -16,6 +16,7 @@ Some imports & setup:
 >>> coll = db.test
 >>> coll.delete_many({})
 <pymongo.results.DeleteResult object at ...>
+
 ```
 
 Set up our watches
@@ -28,6 +29,7 @@ Set up our watches
 >>> w.watch_inserts(
 ...     coll, {'foo': 2})
 <InsertWatch test.test {'foo': 2}>
+
 ```
 
 Insert some data
@@ -43,6 +45,7 @@ Insert some data
 >>> with client:
 ...     coll.insert_many(docs)
 <pymongo.results.InsertManyResult object at ...>
+
 ```
 
 See what our watches observed
@@ -60,6 +63,7 @@ Inserts
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 3, 'foo': 2}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 4, 'foo': 2}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'i', 'ns': 'test.test', 'o': {'_id': 5, 'foo': 2}}
+
 ```
 
 Do some updates
@@ -68,6 +72,7 @@ Do some updates
 >>> with client:
 ...     coll.update_many({}, {'$set': {'bar': 1}})
 <pymongo.results.UpdateResult object at ...>
+
 ```
 
 See what they observed
@@ -82,4 +87,5 @@ Updates
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 0}, 'o': {'$set': {'bar': 1}}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 1}, 'o': {'$set': {'bar': 1}}}
 {'ts': Timestamp(...), 't': 3, 'h': ..., 'v': 2, 'op': 'u', 'ns': 'test.test', 'o2': {'_id': 2}, 'o': {'$set': {'bar': 1}}}
+
 ```
