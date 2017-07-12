@@ -11,7 +11,7 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-class Watcher:
+class Watcher(object):
 
     def __init__(self, cli, await_=False):
         self.oplog = cli.local.oplog.rs
@@ -67,11 +67,14 @@ class Watcher:
         stateful_watches = [
             w for w in self.watches.values()
             if hasattr(w, 'process_entry')]
+        needs_restart = False
         for doc in curs:
             for w in stateful_watches:
-                w.process_entry(doc)
+                needs_restart = needs_restart or w.process_entry(doc)
             self._last_ts = doc['ts']
             yield doc
+            if needs_restart:
+                break
 
 
 class Watch:
@@ -123,19 +126,23 @@ class QueryWatch(Watch):
             yield from w.oplog_branches()
 
     def process_entry(self, entry):
+        """Return true if the oplog query needs to be restarted."""
         if not self.qspec:
             # no need to track IDs
-            return
+            return False
         if entry['ns'] != self._ns:
             # not my collection
-            return
+            return False
         if entry['op'] == 'i':
             if self.check_inserts and not self._mquery.match(entry['o']):
                 # I don't watch that doc
-                return
+                return False
             self._ids.add(entry['o']['_id'])
+            return True
         elif entry['op'] == 'd':
             self._ids.discard(entry['o']['_id'])
+        else:
+            return False
 
 
 class InsertWatch(Watch):
@@ -200,6 +207,7 @@ class DeleteWatch(Watch):
     def oplog_branches(self):
         if self._ids is None:
             yield {'op': 'd', 'ns': self._ns}
+            return
         ids = list(self._ids)
         if len(ids) == 1:
             yield {'op': 'd', 'ns': self._ns, 'o._id': ids[0]}
