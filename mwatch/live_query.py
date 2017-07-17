@@ -1,6 +1,6 @@
-from collections import OrderedDict, namedtuple
+from collections import namedtuple
 
-from mongoquery import Query, QueryError
+from mongoquery import Query
 
 
 Change = namedtuple('Change', 'op ns obj')
@@ -16,15 +16,14 @@ class LiveQuery(object):
             self._query_by_id = Query({'_id': qspec['_id']})
         else:
             self._query_by_id = None
-        self._results = OrderedDict()
+        self._results = {}
         dbname, cname = ns.split('.', 1)
         self._db = getattr(client, dbname)
         self._collection = getattr(self._db, cname)
 
     def refresh(self):
-        self._results = OrderedDict(
-            (obj['_id'], obj)
-            for obj in self._collection.find(self._qspec))
+        cursor = self._collection.find(self._qspec)
+        self._results = {obj['_id']: obj for obj in cursor}
         return [Change('a', self.ns, obj) for obj in self._results.values()]
 
     def add(self, obj):

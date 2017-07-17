@@ -54,6 +54,7 @@ class Oplog(object):
     def __iter__(self):
         curs = self._get_cursor()
         for doc in curs:
+            log.debug('oplog: %r', doc)
             self._last_ts = doc['ts']
             for lq in self._lq_by_ns[doc['ns']].values():
                 res = lq.handle(doc)
