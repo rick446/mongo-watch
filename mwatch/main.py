@@ -182,6 +182,7 @@ class UpdateWatch(Watch):
     def oplog_branches(self):
         if self._ids is None:
             yield {'op': 'u', 'ns': self._ns}
+            return
         ids = list(self._ids)
         if len(ids) == 1:
             yield {'op': 'u', 'ns': self._ns, 'o2._id': ids[0]}
