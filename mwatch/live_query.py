@@ -23,8 +23,13 @@ class LiveQuery(object):
 
     def refresh(self):
         cursor = self._collection.find(self._qspec)
+        old_result_keys = list(self._results)
         self._results = {obj['_id']: obj for obj in cursor}
-        return [Change('a', self.ns, obj) for obj in self._results.values()]
+        result = [
+            Change('d', self.ns, {'_id': k})
+            for k in old_result_keys if k not in self._results]
+        result += [Change('a', self.ns, obj) for obj in self._results.values()]
+        return result
 
     def add(self, obj):
         self._results[obj['_id']] = obj
