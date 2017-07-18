@@ -1,3 +1,4 @@
+import time
 import logging
 from collections import defaultdict
 from pprint import pformat
@@ -11,6 +12,9 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+# TODO: proactively fetch the full object on update (so we don't die with concurrency)
+
+
 class Oplog(object):
 
     def __init__(self, client, await_=False):
@@ -21,6 +25,7 @@ class Oplog(object):
         else:
             self._cursor_type = pymongo.CursorType.TAILABLE
         self._last_ts = self._get_last_ts()
+        self.enabled = True
 
     def register(self, lq):
         self._lq_by_ns[lq.ns][id(lq)] = lq
@@ -32,20 +37,21 @@ class Oplog(object):
         if not ns_lqs:
             self._lq_by_ns.pop(lq.ns)
 
+    def run(self, polling_interval=1.0):
+        while self.enabled:
+            for entry in self:
+                log.info('CHANGE %s %s:\n%s', entry.op, entry.ns, pformat(entry.obj))
+            time.sleep(polling_interval)
+
     def _get_last_ts(self):
         final_entry = self.oplog.find().sort('$natural', -1).limit(1).next()
         log.debug('final_entry: %s', final_entry)
         return final_entry['ts']
 
     def _get_cursor(self):
-        assert self._lq_by_ns, 'Nothing to watch'
-        nss = list(self._lq_by_ns.keys())
-        if len(nss) == 1:
-            spec = {'ns': nss[0]}
-        else:
-            spec = {'ns': {'$in': nss}}
-        spec['ts'] = {'$gt': self._last_ts}
-        log.debug('Query oplog with\n%s', pformat(spec))
+        if not self._lq_by_ns:
+            return None
+        spec = {'ts': {'$gt': self._last_ts}}
         return self.oplog.find(
             spec,
             cursor_type=self._cursor_type,
@@ -53,8 +59,11 @@ class Oplog(object):
 
     def __iter__(self):
         curs = self._get_cursor()
+        if curs is None:
+            return
         for doc in curs:
-            log.debug('oplog: %r', doc)
+            # log.debug('oplog: %r', doc)
+            log.info('oplog: %r', doc)
             self._last_ts = doc['ts']
             for lq in self._lq_by_ns[doc['ns']].values():
                 res = lq.handle(doc)
