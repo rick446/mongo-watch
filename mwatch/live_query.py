@@ -48,7 +48,9 @@ class LiveQuery(object):
             self._callback(Change('d', self, oid))
 
     def handle(self, entry):
-        ns, op, o2, o = entry['ns'], entry['op'], entry.get('o2'), entry['o']
+        ns, op, o2, o, obj = (
+            entry['ns'], entry['op'],
+            entry.get('o2'), entry['o'], entry.get('obj'))
         if ns != self.ns:
             return
         if op == 'i':
@@ -57,11 +59,6 @@ class LiveQuery(object):
         elif op == 'd':
             return self.discard(o['_id'])
         elif entry['op'] == 'u':
-            if self._query_by_id:   # qspec includes an _id clause
-                if not self._query_by_id.match(o2):
-                    return  # the updated object's _id does not match
-            # Load the (updated) object
-            obj = self._collection.find_one(o2)
             if self._query.match(obj):
                 return self.add(obj)
             else:

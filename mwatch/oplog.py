@@ -12,12 +12,10 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-# TODO: proactively fetch the full object on update (so we don't die with concurrency)
-
-
 class Oplog(object):
 
     def __init__(self, client, await_=False):
+        self._client = client
         self.oplog = client.local.oplog.rs
         self._lq_by_ns = defaultdict(dict)
         if await_:
@@ -62,8 +60,13 @@ class Oplog(object):
         if curs is None:
             return
         for doc in curs:
-            # log.debug('oplog: %r', doc)
-            log.info('oplog: %r', doc)
+            if doc['ns'] not in self._lq_by_ns:
+                continue
+            if doc['op'] == 'u':
+                dbname, cname = doc['ns'].split('.', 1)
+                coll = self._client[dbname][cname]
+                doc['obj'] = coll.find_one(doc['o2'])
+            log.debug('oplog: %r', doc)
             self._last_ts = doc['ts']
             for lq in self._lq_by_ns[doc['ns']].values():
                 res = lq.handle(doc)
