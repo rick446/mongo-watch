@@ -27,15 +27,16 @@ class LiveQuery(object):
     def log_entry(self, entry):
         log.info('CHANGE %s %s:\n%s', entry.op, entry.ns, pformat(entry.obj))
 
-    def refresh(self):
+    def refresh(self, emit=False):
         old_result_ids = list(self._result_ids)
         cursor = self._collection.find(self._qspec)
         results = {obj['_id']: obj for obj in cursor}
-        for oid in old_result_ids:
-            if oid not in results:
-                self._callback(Change('d', self, oid))
-        for obj in results.values():
-            self._callback(Change('a', self, obj))
+        if emit:
+            for oid in old_result_ids:
+                if oid not in results:
+                    self._callback(Change('d', self, oid))
+            for obj in results.values():
+                self._callback(Change('a', self, obj))
         self._result_ids = set(results)
 
     def add(self, obj):
@@ -57,9 +58,13 @@ class LiveQuery(object):
             if self._query.match(o):
                 return self.add(o)
         elif op == 'd':
+            log.info('DISCARD because DELETE')
             return self.discard(o['_id'])
         elif entry['op'] == 'u':
             if self._query.match(obj):
                 return self.add(obj)
             else:
+                log.info(
+                    'DISCARD because NOMATCH\nentry: %r\nqspec: %r',
+                    entry, self._qspec)
                 return self.discard(o2['_id'])
