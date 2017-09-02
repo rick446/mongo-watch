@@ -64,7 +64,7 @@ class LiveQuery(object):
             if self._query.match(obj):
                 return self.add(obj)
             else:
-                log.info(
+                log.debug(
                     'DISCARD because NOMATCH\nentry: %r\nqspec: %r',
                     entry, self._qspec)
                 return self.discard(o2['_id'])
