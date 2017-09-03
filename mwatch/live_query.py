@@ -22,13 +22,13 @@ class LiveQuery(object):
             self._query_by_id = Query({'_id': qspec['_id']})
         else:
             self._query_by_id = None
-        self._result_ids = set()
+        self._result_set = {}
 
     def log_entry(self, entry):
         log.info('CHANGE %s %s:\n%s', entry.op, entry.ns, pformat(entry.obj))
 
     def refresh(self, emit=False):
-        old_result_ids = list(self._result_ids)
+        old_result_ids = list(self._result_set)
         cursor = self._collection.find(self._qspec)
         results = {obj['_id']: obj for obj in cursor}
         if emit:
@@ -37,16 +37,16 @@ class LiveQuery(object):
                     self._callback(Change('d', self, oid))
             for obj in results.values():
                 self._callback(Change('a', self, obj))
-        self._result_ids = set(results)
+        self._result_set = results
 
     def add(self, obj):
-        self._result_ids.add(obj['_id'])
+        self._result_set[obj['_id']] = obj
         self._callback(Change('a', self, obj))
 
     def discard(self, oid):
-        if oid in self._result_ids:
-            self._result_ids.discard(oid)
-            self._callback(Change('d', self, oid))
+        obj = self._result_set.pop(oid, None)
+        if obj:
+            self._callback(Change('d', self, obj))
 
     def handle(self, entry):
         ns, op, o2, o, obj = (
