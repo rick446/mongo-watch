@@ -5,7 +5,7 @@ from collections import namedtuple
 from mongoquery import Query
 
 log = logging.getLogger(__name__)
-Change = namedtuple('Change', 'op lq obj')
+Change = namedtuple('Change', 'op lq ts obj')
 
 
 class LiveQuery(object):
@@ -39,32 +39,32 @@ class LiveQuery(object):
                 self._callback(Change('a', self, obj))
         self._result_set = results
 
-    def add(self, obj):
+    def add(self, ts, obj):
         self._result_set[obj['_id']] = obj
-        self._callback(Change('a', self, obj))
+        self._callback(Change('a', self, ts, obj))
 
-    def discard(self, oid):
+    def discard(self, ts, oid):
         obj = self._result_set.pop(oid, None)
         if obj:
-            self._callback(Change('d', self, obj))
+            self._callback(Change('d', self, ts, obj))
 
     def handle(self, entry):
-        ns, op, o2, o, obj = (
-            entry['ns'], entry['op'],
+        ts, ns, op, o2, o, obj = (
+            entry['ts'], entry['ns'], entry['op'],
             entry.get('o2'), entry['o'], entry.get('obj'))
         if ns != self.ns:
             return
         if op == 'i':
             if self._query.match(o):
-                return self.add(o)
+                return self.add(ts, o)
         elif op == 'd':
             log.info('DISCARD because DELETE')
             return self.discard(o['_id'])
         elif entry['op'] == 'u':
             if self._query.match(obj):
-                return self.add(obj)
+                return self.add(ts, obj)
             else:
                 log.debug(
                     'DISCARD because NOMATCH\nentry: %r\nqspec: %r',
                     entry, self._qspec)
-                return self.discard(o2['_id'])
+                return self.discard(ts, o2['_id'])
