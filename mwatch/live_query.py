@@ -59,7 +59,7 @@ class LiveQuery(object):
                 return self.add(ts, o)
         elif op == 'd':
             log.info('DISCARD because DELETE')
-            return self.discard(o['_id'])
+            return self.discard(ts, o['_id'])
         elif entry['op'] == 'u':
             if self._query.match(obj):
                 return self.add(ts, obj)
