@@ -68,7 +68,7 @@ class Oplog(object):
                 doc['obj'] = coll.find_one(doc['o2'])
             log.debug('oplog: %r', doc)
             self._last_ts = doc['ts']
-            for lq in self._lq_by_ns[doc['ns']].values():
+            for lq in list(self._lq_by_ns[doc['ns']].values()):
                 res = lq.handle(doc)
                 if res:
                     yield res
