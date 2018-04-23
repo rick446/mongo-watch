@@ -48,6 +48,28 @@ class LiveQuery(object):
         if obj:
             self._callback(Change('d', self, ts, obj))
 
+    def run(self, change_stream):
+        for event in change_stream:
+            self.handle_change_stream_event(event)
+
+    def handle_change_stream_event(self, event):
+        if '{db}.{coll}'.format(**event['ns']) != self.ns:
+            return
+        if event['operationType'] == 'insert':
+            if self._query.match(event['fullDocument']):
+                self.add(None, event['fullDocument'])
+        elif event['operationType'] == 'delete':
+            log.info('DISCARD b/c DELETE')
+            return self.discard(None, event['documentKey']['_id'])
+        elif event['operationType'] in ('update', 'replace'):
+            if self._query.match(event['fullDocument']):
+                return self.add(None, event['fullDocument'])
+            else:
+                log.debug(
+                    'DISCARD because NOMATCH\nevent: %r\nqspec: %r',
+                    event, self._qspec)
+                return self.discard(None, event['documentKey']['_id'])
+
     def handle(self, entry):
         ts, ns, op, o2, o, obj = (
             entry['ts'], entry['ns'], entry['op'],
